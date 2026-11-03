@@ -1,143 +1,67 @@
-# Dokumentasi Kontrak REST API - SisaBaik Chapter 7
+# Dokumentasi API SisaBaik
 
-Rangkuman ini menyajikan penjelasan mengenai *endpoint*, parameter *query*, kolom (*field*) wajib, logika bisnis, serta kualifikasi kode status respons yang diterapkan pada layanan REST API SisaBaik.
+Dokumen ini memuat rincian mengenai *endpoint*, spesifikasi muatan data (*payload*), mekanisme keamanan, hingga regulasi otorisasi data pada API SisaBaik.
 
-## Alamat Utama (Base URL)
-`http://127.0.0.1:3000/api`
+## Jalur Pendaftaran (Registrasi)
 
----
+Sistem membedakan mekanisme pembuatan akun menjadi dua alur independen sesuai kebutuhan data profil pengguna:
 
-## Daftar Endpoint yang Tersedia
+1. **Pendaftaran Akun Konsumen**
 
-### 1. Cek Ketersediaan Layanan (Health Check)
-- **GET `/health`**
+   * `POST /api/auth/register/consumer`
+   * Membuat identitas akun baru untuk pembeli atau pelanggan umum.
 
-  * **Deskripsi:** Memeriksa status keaktifan proses server serta memastikan koneksi ke basis data PostgreSQL berjalan normal.
-  * **Parameter Query:** Tidak membutuhkan parameter.
-  * **Contoh Respons Berhasil (`200 OK`):**
-    ```json
-    {
-      "success": true,
-      "data": {
-        "status": "ok",
-        "database": "connected",
-        "waktu": "2026-10-12T00:00:00.000Z"
-      }
-    }
-    ```
+2. **Pendaftaran Akun Penyedia**
 
----
+   * `POST /api/auth/register/provider`
+   * Memproses pendaftaran mitra penyedia produk makanan dengan melampirkan rincian profil unit usaha.
 
-### 2. Pengelolaan Penawaran (Offers)
-- **GET `/penawaran`**
+## Parameter Profil Usaha dan Struktur Body Bisnis
 
-  * **Deskripsi:** Menampilkan seluruh koleksi penawaran yang tersedia, lengkap dengan opsi penyaringan dan pencarian data.
-  * **Parameter Query yang Dapat Digunakan:**
-    * `q` (string): Kata kunci untuk pencarian berdasarkan judul atau deskripsi produk.
-    * `kategori` (string): Penyaringan berdasarkan kategori barang.
-    * `status` (string): Penyaringan menurut status kondisi penawaran.
-    * `tersedia` (boolean/string): Menyaring item yang jumlah stoknya masih mencukupi.
-    * `page` (integer): Urutan halaman data (paginasi).
-    * `limit` (integer): Batas maksimum item per halaman.
+Komposisi *payload* pada pendaftaran mitra penyedia maupun saat pembaharuan profil usaha mencakup entitas data berikut:
 
-- **GET `/penawaran/:id`**
+* `business_name` (string, wajib): Identitas resmi atau nama komersial entitas usaha.
 
-  * **Deskripsi:** Mengambil informasi detail dari satu entitas penawaran tertentu berdasarkan nilai ID.
-  * **Parameter URL:** `:id` (Pengenal unik penawaran).
+* `business_category` (string, wajib): Bidang/kategori usaha kuliner (misalnya: Toko Roti/Bakery, Rumah Makan/Restoran, Penyedia Katering).
 
-- **POST `/penawaran`**
+* `address` (string, wajib): Alamat lengkap lokasi operasional toko/usaha.
 
-  * **Deskripsi:** Menambahkan item penawaran baru ke dalam sistem (wajib menyertakan header `Content-Type: application/json`).
-  * **Atribut Wajib (Body Request):**
-    * `penyediaId` (string/integer): ID identitas pihak penyedia/mitra pemilik produk.
-    * `judul` (string): Nama atau deskripsi singkat penawaran produk.
-    * `harga` (number): Harga per unit produk.
-    * `stok` (integer): Ketersediaan jumlah unit awal.
+* `operational_hours` (string/object): Rentang waktu/jam layanan penyerahan makanan surplus.
 
-- **PUT `/penawaran/:id`**
+## Kode Status Kesalahan (Error HTTP)
 
-  * **Deskripsi:** Memperbarui data pada penawaran yang diizinkan untuk diubah (tidak berlaku untuk ID dan keterkaitan penyedia).
-  * **Atribut Wajib / Dapat Diubah (Body Request):**
-    * `judul` (string)
-    * `harga` (number)
-    * `stok` (integer)
-    * `status` (string)
+Umpan balik atas kegagalan proses mengacu pada konvensi kode status HTTP standar:
 
-- **DELETE `/penawaran/:id`**
+* `400 Bad Request`: Format isi data (*payload*) tidak valid atau gagal dalam verifikasi input.
 
-  * **Deskripsi:** Menghapus data penawaran. Proses penghapusan akan dibatalkan oleh sistem apabila penawaran bersangkutan telah memiliki catatan transaksi/pesanan sebelumnya.
-  * **Respons Berhasil:** `204 No Content` (tanpa memuat *body*).
-  * **Respons Ditolak:** `409 Conflict` (apabila data penawaran memiliki riwayat transaksi).
+* `401 Unauthorized`: Kredensial token tidak sah, telah kadaluwarsa, atau tidak dikirimkan dalam *header*.
 
----
+* `403 Forbidden`: Otorisasi hak akses tidak mencukupi (contohnya: akun penyedia masih dalam tahap peninjauan status).
 
-### 3. Pemrosesan Pesanan (Orders) & Ketentuan Bisnis
-- **GET `/pesanan`**
+* `404 Not Found`: Alamat *endpoint* atau entitas data yang dimaksud tidak ditemukan.
 
-  * **Deskripsi:** Menampilkan ringkasan daftar transaksi pesanan secara bertahap (paginasi).
-  * **Parameter Query yang Diterima:** `page`, `limit`.
+* `429 Too Many Requests`: Frekuensi permintaan melampaui batas ambang yang diizinkan (*rate limit*).
 
-- **GET `/pesanan/:id`**
+* `500 Internal Server Error`: Terjadi hambatan tak terduga pada sistem server atau sistem basis data.
 
-  * **Deskripsi:** Menampilkan rincian menyeluruh dari suatu transaksi pesanan (mencakup data umum transaksi beserta daftar item di dalamnya).
-  * **Parameter URL:** `:id` (Pengenal unik transaksi pesanan).
+## Pembatasan Frekuensi Akses (Rate Limiting) Bertingkat
 
-- **POST `/pesanan`**
+Sistem mengimplementasikan kontrol pembatasan laju permintaan sesuai tingkat sensitivitas *endpoint*:
 
-  * **Deskripsi:** Membuat entitas pesanan baru secara atomik melalui mekanisme transaksi database, lengkap dengan peninjauan kuantitas stok dan pembatasan asal penyedia.
-  * **Atribut Wajib (Body Request):**
-    * `emailPembeli` (string): Alamat surat elektronik akun pembeli yang sudah terdaftar dan aktif dalam database.
-    * `items` (array of objects): Rincian produk yang dipesan, di mana setiap objek wajib mencantumkan:
-      * `penawaranId` (string/integer)
-      * `kuantitas` (integer)
-  * **Ketentuan Bisnis Utama (Aturan Tunggal Penyedia / Single Provider Rule):**
-    * Layanan memberlakukan verifikasi ketat sehingga seluruh item di dalam satu kali proses pemesanan **harus berasal dari mitra penyedia (*merchant*) yang sama**. Jika ditemukan kombinasi produk dari penyedia berbeda, pemrosesan akan langsung digagalkan dengan tanggapan error `MIXED_PROVIDER` (`409 Conflict`).
-  * **Contoh Format Body Request:**
-    ```json
-    {
-      "emailPembeli": "siti.pembeli@example.test",
-      "items": [
-        {
-          "penawaranId": "7",
-          "kuantitas": 1
-        }
-      ]
-    }
-    ```
+* **Endpoint Publik / Umum**: Menerapkan ambang batas standar untuk keperluan eksplorasi katalog produk.
 
----
+* **Endpoint Autentikasi & Transaksi**: Menerapkan batas ambang yang jauh lebih ketat guna menanggulangi potensi serangan *brute-force* serta penyalahgunaan pemrosesan transaksi.
 
-## Format Standar Respons & Klasifikasi Kode Status Error
+## Otorisasi Lingkup Pesanan (Order Scopes)
 
-- **Struktur Respons Sukses:**
+Aksesibilitas pengelolaan transaksi disesuaikan menurut hirarki peran serta kepemilikan data:
 
-  ```json
-  {
-    "success": true,
-    "data": { ... }
-  }
-  ```
+* Konsumen hanya diizinkan untuk melihat, menargetkan transaksi baru, dan membatalkan pesanan yang terdaftar atas nama mereka sendiri.
 
-- **Struktur Respons Gagal:**
+* Penyedia memiliki akses terbatas hanya pada pengelolaan pesanan yang masuk ke inventaris toko atau unit bisnis mereka.
 
-  ```json
-  {
-    "success": false,
-    "error": {
-      "code": "KODE_ERROR",
-      "message": "Pesan deskripsi kesalahan..."
-    }
-  }
-  ```
+## Ketentuan Katalog Publik
 
-- **Katalog Kode Status HTTP yang Diterapkan:**
+* Halaman katalog umum (`GET /api/catalog` atau rute setara) secara eksklusif hanya menyajikan daftar produk dari **penyedia yang telah mengantongi status verifikasi (verified/reviewed)**.
 
-    * `200 OK`: Permintaan membaca atau memperbarui data berhasil diproses.
-    * `201 Created`: Pembuatan entitas data baru berhasil (disertai keluaran data yang baru dibuat).
-    * `204 No Content`: Operasi penghapusan data berhasil dilakukan tanpa mengembalikan isi respons (*body*).
-    * `400 Bad Request`: Pemeriksaan entri gagal, terdapat parameter wajib yang kosong, atau struktur JSON tidak valid.
-    * `404 Not Found`: Lokasi endpoint atau atribut ID data yang dicari tidak ditemukan dalam basis data.
-    * `409 Conflict`: Terjadi pelanggaran aturan bisnis (seperti stok habis saat transaksi, pembatalan penghapusan penawaran yang berriwayat, atau ketidaksesuaian aturan penyedia tunggal / *mixed provider*).
-    * `413 Payload Too Large`: Ukuran muatan (*payload*) data permintaan melebihi batas batas yang diizinkan server.
-    * `415 Unsupported Media Type`: Format header `Content-Type` tidak sesuai (bukan `application/json` pada pengiriman metode mutasi).
-    * `500 Internal Server Error`: Terjadi kendala internal pada server atau terputusnya koneksi ke sistem basis data.
+* Daftar penawaran dari penyedia yang masih memegang status peninjauan (*pending review*) secara otomatis disembunyikan dari katalog umum.

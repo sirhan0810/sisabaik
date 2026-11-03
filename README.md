@@ -1,56 +1,62 @@
-# SisaBaik API (Chapter 7)
+# SisaBaik API
 
-Backend REST API untuk platform SisaBaik yang dibangun menggunakan kombinasi Express.js dan sistem basis data relasional PostgreSQL. Proyek ini dikerjakan sebagai salah satu bagian dari materi perkuliahan Pengembangan Web di Program Studi Bisnis Digital, Universitas Negeri Padang.
+SisaBaik merupakan sebuah platform digital yang mempertemukan pihak penyedia makanan dengan masyarakat luas untuk meminimalisasi pembuangan bahan pangan dengan cara menjual kembali produk surplus yang layak konsumsi.
 
-## Prasyarat
-- Node.js versi 22 atau versi yang lebih baru
-- PostgreSQL lokal (telah menyiapkan database bernama `sisabaik_dev` beserta skema yang dibuat pada Chapter 6)
-- npm
+## Arsitektur Sistem dan Urutan Migrasi Database
 
-## Cara Menjalankan Proyek
-1. Salin, buat, dan sesuaikan konfigurasi pada berkas `.env` di direktori utama berdasarkan contoh `.env.example`:
+Aplikasi ini menggunakan PostgreSQL sebagai sistem basis data utamanya. Berikut adalah tahapan eksekusi skrip migrasi serta pengisian data awal:
 
-   ```env
-   PORT=3000
-   PGHOST=localhost
-   PGPORT=5432
-   PGDATABASE=sisabaik_dev
-   PGUSER=postgres
-   PGPASSWORD=GANTI DENGAN PASSWORD LOKAL
-   ```
+* `database/01_schema.sql` - Penyiapan struktur tabel dasar serta relasi antar-entitas.
 
-2. Unduh dan pasang seluruh pustaka (*dependencies*) yang dibutuhkan:
+* `database/02_seed.sql` - Penyediaan sekumpulan data awal (*sample data*) untuk kebutuhan pengujian.
+
+* `database/03_queries.sql` sampai `06_...` - Berkas berisi sekumpulan kueri pendukung untuk operasi pengolahan data (CRUD) dan alur transaksi.
+
+* `database/07_auth.sql` - Skrip penyesuaian basis data untuk mekanisme autentikasi, pengelolaan token keamanan, serta riwayat sesi pengguna.
+
+## Layanan Registrasi Mandiri dan Hak Akses Pengguna
+
+Platform ini memfasilitasi pendaftaran secara mandiri bagi 2 (dua) tipe peranan pengguna:
+
+1. **Konsumen**: Pengguna biasa yang memiliki hak akses untuk menjelajahi katalog produk publik, membuat pesanan baru, dan melakukan transaksi pembelian.
+
+2. **Penyedia**: Pelaku usaha kuliner yang mendaftarkan identitas usahanya untuk memasarkan makanan sisa produksi atau surplus.
+   * **Proses Verifikasi Penyedia**: Setiap pendaftaran akun penyedia baru wajib melalui tahap pemeriksaan atau persetujuan terlebih dahulu sebelum diperbolehkan untuk menayangkan daftar penawaran di halaman katalog umum.
+
+## Keamanan Sistem, Validasi Autentikasi, dan Pengakhiran Sesi (Logout)
+
+* **Pengujian Fitur Autentikasi (`auth:test`)**: Jalankan instruksi berikut guna mengecek keandalan sistem autentikasi dan alur alokasi token:
+
+  ```bash
+  npm run auth:test
+  ```
+
+* **Dampak Pencabutan Seluruh Sesi (Global Logout)**: Ketika pengguna memilih untuk keluar dari seluruh sesi yang terhubung, sistem secara otomatis akan menghapus seluruh entitas token yang sedang aktif beserta data sesinya sesuai dengan struktur migrasi `07_auth.sql`. Hal ini membuat seluruh token JWT yang telah terbit sebelumnya seketika tidak dapat dipergunakan kembali di perangkat manapun.
+
+## Pengaturan Variabel Lingkungan (Environment)
+
+Daftar parameter lingkungan berikut wajib disiapkan di dalam berkas `.env` (tanpa perlu menyertakan nilai kredensial atau kunci rahasia):
+
+* `PORT`
+
+* `DATABASE_URL`
+
+* `JWT_SECRET`
+
+* `NODE_ENV`
+
+## Langkah Menjalankan Server dan Halaman Web
+
+1. Pasang seluruh modul pustaka yang dibutuhkan:
 
    ```bash
    npm install
    ```
 
-3. Jalankan server aplikasi pada mode pengembangan:
+2. Operasikan server dalam lingkungan pengembangan:
 
    ```bash
    npm run dev
    ```
 
-4. Akses peramban (*browser*) dan buka alamat `http://127.0.0.1:3000` untuk mulai memakai antarmuka pengujian.
-
-## Pengujian API
-
-- **Pengujian Mutasi dan Operasi CRUD (Secara Otomatis):**
-
-   ```bash
-   npm run api:test
-   ```
-
-- **Pengujian Beban & Konkurensi (Permintaan Bersamaan):**
-
-   ```bash
-   node scripts/uji-konkurensi.js
-   ```
-
-## Catatan Implementasi & Batasan
-
-- **Identitas serta Kontrak Terbaru:** Proses pembuatan pesanan kini memanfaatkan atribut `emailPembeli` (merujuk pada data entitas `pengguna` yang aktif), sementara ID untuk penawaran maupun pesanan dikembalikan di dalam respons sebagai format string digit.
-
-- **Validasi Data & Manajemen Transaksi:** Setiap proses perubahan data pesanan menerapkan mekanisme transaksi database yang bersifat atomik (`REPEATABLE READ`), penguncian baris eksklusif (`FOR UPDATE`), serta pengecekan aturan bisnis terkait pembatasan satu penyedia per transaksi pemesanan (`MIXED_PROVIDER`).
-
-- **Sistem Keamanan & Autentikasi:** Saat ini, aplikasi masih beroperasi secara lokal menggunakan akun uji coba dan belum mengintegrasikan modul login atau otorisasi penuh secara menyeluruh.
+3. Buka peramban (*browser*) untuk mengakses antarmuka statis pada lokasi `public/index.html` atau halaman alur autentikasi pada `public/auth.html`.
