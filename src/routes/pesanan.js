@@ -28,6 +28,7 @@ router.post("/", (req, res) => {
         }
         idUnik.add(baris.penawaranId);
         const item = penawaran.find((penawaranItem) => penawaranItem.id === baris.penawaranId);
+
         if (!item) {
             return kirimValidasi(res, `Penawaran ${baris.penawaranId} tidak ditemukan.`, 404, "OFFER_NOT_FOUND");
         }
